@@ -6,7 +6,6 @@ from data_utils import tokenize
 class StoryAgent:
 
     def __init__(self, max_stories=500):
-
         print("Loading TXT dataset...")
 
         tokens = []
@@ -46,8 +45,7 @@ class StoryAgent:
 
         print("Training finished.")
 
-    def generate(self, keywords, max_len=100):
-
+    def generate_ngram(self, keywords, max_len=100):
         keywords = [k.lower() for k in keywords]
         result = ["<s>"]
 

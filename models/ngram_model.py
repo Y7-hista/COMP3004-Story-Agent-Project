@@ -13,8 +13,8 @@ class NGramModel:
         用前 n-1 个词预测第 n 个词
         """
         for i in range(len(tokens) - self.n + 1):
-            key = tuple(tokens[i:i+self.n-1])   # ✅ 前 n-1
-            next_word = tokens[i+self.n-1]      # ✅ 第 n 个
+            key = tuple(tokens[i:i+self.n-1])   
+            next_word = tokens[i+self.n-1]     
             self.model[key].append(next_word)
 
     def predict(self, context):
