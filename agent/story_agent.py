@@ -1,85 +1,114 @@
 import random
-from models.ngram_model import NGramModel
-from data_utils import tokenize
-
+import re
+from models.SLM import StatisticalLanguageModel
+import nltk
 
 class StoryAgent:
+    def __init__(self,max_stories=150):
+        print("Loading dataset...")
+        self.stories = []
+        current = []
 
-    def __init__(self, max_stories=500):
-        print("Loading TXT dataset...")
-
-        tokens = []
-        story_count = 0
-        current_story = ""
-
-        with open("data/TinyStories-train.txt", "r", encoding="utf-8") as f:
+        with open("data/TinyStories-train.txt", encoding = "utf-8") as f:
+            count = 0
             for line in f:
                 line = line.strip()
-
                 if line == "<|endoftext|>":
-
-                    if current_story:
-                        tokens += ["<s>"] + tokenize(current_story.lower()) + ["</s>"]
-                        story_count += 1
-                        current_story = ""
-
-                    if story_count >= max_stories:
-                        break
-
+                    if current:
+                        story = " ".join(current)
+                        self.stories.append(story)
+                        current = []
+                        count += 1
+                        if count >= max_stories:
+                            break
                 else:
-                    current_story += " " + line
+                    current.append(line)
 
-        print(f"Loaded {story_count} stories")
+        text = " ".join(self.stories)
+        # Train all models
+        self.models = {}
+        configs = {
+            "Bigram":
+            dict(n = 2, smoothing = "laplace", path = "saved_models/bigram.pkl"),
+            "Trigram":
+            dict(n = 3, smoothing = "laplace", path = "saved_models/trigram.pkl"),
+            # "kneserney":
+            # dict(n = 3, smoothing = "kneserney", path = "saved_models/kneser.pkl")
+        }
 
-        # ===== 正确训练 =====
-        self.trigram = NGramModel(n=3)
-        self.trigram.train(tokens)
+        for name, cfg in configs.items():
+            print(f"Training {name}")
 
-        self.bigram = NGramModel(n=2)
-        self.bigram.train(tokens)
+            lm = StatisticalLanguageModel(n = cfg["n"], smoothing = cfg["smoothing"])
 
-        self.unigram = NGramModel(n=1)
-        self.unigram.train(tokens)
+            lm.train(text, cfg["path"])
 
-        self.vocab = list(set(tokens))
+            self.models[name] = lm
 
-        print("Training finished.")
+    def retrieve_seed(self, keywords):
+        keyword_set = set(
+            k.lower()
+            for k in keywords
+        )
+        scored = []
+        for story in self.stories:
+            words = set(re.findall(r"\w+", story.lower()))
+            overlap = len(keyword_set & words)
 
-    def generate_ngram(self, keywords, max_len=100):
-        keywords = [k.lower() for k in keywords]
-        result = ["<s>"]
+            if overlap > 0:
+                scored.append((overlap, story))
 
-        for _ in range(max_len):
+        if not scored:
+            seed_story = random.choice(self.stories)
+        else:
+            scored.sort(key = lambda x:x[0], reverse = True)
 
-            next_word = None
+            top = [
+                x[1]
+                for x in scored[:10]
+            ]
+            seed_story = random.choice(top)
 
-            # ===== trigram =====
-            if len(result) >= 2:
-                next_word = self.trigram.predict(result)
+        sents = nltk.sent_tokenize(seed_story)
+        seed_words = []
 
-            # ===== bigram =====
-            if next_word is None and len(result) >= 1:
-                next_word = self.bigram.predict(result)
+        for s in sents[:2]:
+            seed_words += nltk.word_tokenize(s.lower())
 
-            # ===== unigram =====
-            if next_word is None:
-                next_word = random.choice(self.vocab)
+        return (keywords + seed_words[:20])
 
-            # 避免 start token
-            if next_word == "<s>":
-                continue
+    def generate(self, keywords, model_name = "trigram"):
+        """
+        Retrieval-Augmented Story Generation
+        prompt control the theme of story
+        """
+        if model_name not in self.models:
+            model_name = "trigram"
 
-            # 句子结束
-            if next_word == "</s>":
-                break
+        seed = self.retrieve_seed(keywords)
+        generated = self.models[model_name].generate(seed, num_sentences = 6)
 
-            result.append(next_word)
+        # keyword coverage repair
+        story_text = generated.lower()
+        missing = []
 
-        # ===== 插入关键词（更合理）=====
-        for kw in keywords:
-            insert_pos = random.randint(1, len(result)-1)
-            result.insert(insert_pos, kw)
+        for k in keywords:
+            if k.lower() not in story_text:
+                missing.append(k)
 
-        final_words = [w for w in result if w not in {"<s>", "</s>"}]
+        if missing:
+            generated += (" In the end they found " + ", ".join(missing) + ".")
 
-        return " ".join(final_words)
+        return generated
+    
+    def compare_models(self, keywords, runs = 5):
+        results = {}
+        for model_name in ["Bigram", "Trigram"]:
+            stories=[]
+            for _ in range(runs):
+                s=self.generate(keywords, model_name)
+                stories.append(s)
+
+            results[model_name]=stories
+            # results[m] = self.generate(keywords, m)
+        return results
