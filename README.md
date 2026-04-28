@@ -6,6 +6,13 @@ Use `streamlit` to build a simple UI
 pip install streamlit
 pip install datasets
 pip install transformers
+
+nltk.download('punkt')
+nltk.download('punkt_tab')
+nltk.download('wordnet')
+nltk.download('omw-1.4')
+
+pip install torch torchvision torchaudio
 # Run:
 python -m streamlit run app.py
 ```

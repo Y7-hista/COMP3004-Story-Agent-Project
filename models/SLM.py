@@ -98,8 +98,6 @@ class StatisticalLanguageModel:
     def train(self, text, model_path = "saved_models/SLM_model.pkl"):
         if os.path.exists(model_path):
             print("Loading saved model...")
-            # loaded = StatisticalLanguageModel.load_model(model_path)
-            # self.__dict__.update(loaded.__dict__)
             self.model = StatisticalLanguageModel.load_model(model_path)
             return
         
@@ -148,11 +146,8 @@ class StatisticalLanguageModel:
         """
         Search promots input in the dataset
         """
-        candidates=[]
-        keyword_set = set(
-            k.lower()
-            for k in keywords
-        )
+        candidates = []
+        keyword_set = set(k.lower() for k in keywords)
 
         for sentence in self.tokenized_text:
             overlap = len(keyword_set & set(sentence))
@@ -161,7 +156,7 @@ class StatisticalLanguageModel:
                 candidates.append((overlap, sentence))
 
         if not candidates:
-            return ["once","upon","a","time"]
+            return ["once", "upon", "a", "time"]
 
         # overlap越高越好
         candidates.sort(key = lambda x : x[0], reverse = True)
@@ -211,39 +206,6 @@ class StatisticalLanguageModel:
                     text+="."
 
                 story.append(text.capitalize())
-        # context = list(keywords)
-        # story = []
-
-        # for s in range(num_sentences):
-        #     sentence = []
-        #     for i in range(max_sentence_len):
-        #         if (random.random() < 0.18 and len(keywords) > 0):
-        #             next_token = random.choice(keywords)
-        #         else:
-        #             next_token = self.model.generate(num_words = 1, text_seed = context)
-
-        #             # nltk often returns list
-        #             if isinstance(next_token, list):
-        #                 next_token = next_token[0]
-
-        #         if next_token in ["<s>", "</s>"]:
-        #             break
-
-        #         sentence.append(next_token)
-        #         context.append(next_token)
-        #         context = context[-(self.n - 1):]
-
-        #         # probabilistic sentence stop
-        #         if (i > 8 and random.random() < 0.15):
-        #             break
-
-        #     if len(sentence) > 0:
-        #         if sentence[-1] not in [".", "!", "?"]:
-        #             sentence.append(".")
-
-        #         sentence = " ".join(sentence)
-        #         story.append(sentence.capitalize())
-
         return " ".join(story)
 
     # compare models

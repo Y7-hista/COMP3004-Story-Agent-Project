@@ -1,6 +1,7 @@
 import random
 import re
 from models.SLM import StatisticalLanguageModel
+from models.RNN import RNNModel
 import nltk
 
 class StoryAgent:
@@ -27,29 +28,45 @@ class StoryAgent:
         text = " ".join(self.stories)
         # Train all models
         self.models = {}
-        configs = {
-            "Bigram":
-            dict(n = 2, smoothing = "laplace", path = "saved_models/bigram.pkl"),
-            "Trigram":
-            dict(n = 3, smoothing = "laplace", path = "saved_models/trigram.pkl"),
-            # "kneserney":
-            # dict(n = 3, smoothing = "kneserney", path = "saved_models/kneser.pkl")
-        }
 
-        for name, cfg in configs.items():
-            print(f"Training {name}")
+        # Bigram
+        print("Training Bigram")
+        bigram = StatisticalLanguageModel(n = 2, smoothing="laplace")
+        bigram.train(text, "saved_models/bigram.pkl")
+        self.models["Bigram"] = bigram
 
-            lm = StatisticalLanguageModel(n = cfg["n"], smoothing = cfg["smoothing"])
+        # Trigram
+        print("Training Trigram")
+        trigram = StatisticalLanguageModel(n = 3, smoothing = "laplace")
+        trigram.train(text, "saved_models/trigram.pkl")
+        self.models["Trigram"] = trigram
 
-            lm.train(text, cfg["path"])
+        # RNN
+        print("Training RNN")
+        rnn = RNNModel()
+        rnn.train(text, epochs = 30)
+        self.models["RNN"] = rnn
 
-            self.models[name] = lm
+        # configs = {
+        #     "Bigram":
+        #     dict(n = 2, smoothing = "laplace", path = "saved_models/bigram.pkl"),
+        #     "Trigram":
+        #     dict(n = 3, smoothing = "laplace", path = "saved_models/trigram.pkl"),
+        #     # "kneserney":
+        #     # dict(n = 3, smoothing = "kneserney", path = "saved_models/kneser.pkl")
+        # }
+
+        # for name, cfg in configs.items():
+        #     print(f"Training {name}")
+
+        #     lm = StatisticalLanguageModel(n = cfg["n"], smoothing = cfg["smoothing"])
+
+        #     lm.train(text, cfg["path"])
+
+        #     self.models[name] = lm
 
     def retrieve_seed(self, keywords):
-        keyword_set = set(
-            k.lower()
-            for k in keywords
-        )
+        keyword_set = set(k.lower() for k in keywords)
         scored = []
         for story in self.stories:
             words = set(re.findall(r"\w+", story.lower()))
@@ -63,10 +80,7 @@ class StoryAgent:
         else:
             scored.sort(key = lambda x:x[0], reverse = True)
 
-            top = [
-                x[1]
-                for x in scored[:10]
-            ]
+            top = [x[1] for x in scored[:10]]
             seed_story = random.choice(top)
 
         sents = nltk.sent_tokenize(seed_story)
@@ -84,7 +98,11 @@ class StoryAgent:
         """
         if model_name not in self.models:
             model_name = "trigram"
-
+        # RNN separate generation
+        if model_name=="RNN":
+            return self.models["RNN"].generate_story(keywords)
+        # N-gram generation
+        
         seed = self.retrieve_seed(keywords)
         generated = self.models[model_name].generate(seed, num_sentences = 6)
 
@@ -103,7 +121,7 @@ class StoryAgent:
     
     def compare_models(self, keywords, runs = 5):
         results = {}
-        for model_name in ["Bigram", "Trigram"]:
+        for model_name in ["Bigram", "Trigram", "RNN"]:
             stories=[]
             for _ in range(runs):
                 s=self.generate(keywords, model_name)

@@ -36,7 +36,8 @@ with st.sidebar:
         "Choose model",
         [
             "Bigram",
-            "Trigram"
+            "Trigram",
+            "RNN"
         ],
         key="model"
     )
@@ -95,11 +96,7 @@ with tab2:
         run_exp=st.form_submit_button("Run Experiment")
 
         if run_exp:
-            keywords=[
-                x.strip().lower()
-                for x in prompt2.split(",")
-                if x.strip()
-            ]
+            keywords=[x.strip().lower() for x in prompt2.split(",") if x.strip()]
 
             with st.spinner("Running experiments..."):
                 outputs=agent.compare_models(keywords, runs)
