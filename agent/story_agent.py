@@ -1,11 +1,15 @@
 import random
 import re
-from models.SLM import StatisticalLanguageModel
-from models.RNN import RNNModel
 import nltk
 
+from models.topic_planner import TopicPlanner
+from models.SLM import StatisticalLanguageModel
+from models.RNN import RNNModel
+from models.LSTM import LSTMModel
+
+
 class StoryAgent:
-    def __init__(self,max_stories=150):
+    def __init__(self,max_stories = 500):
         print("Loading dataset...")
         self.stories = []
         current = []
@@ -26,44 +30,33 @@ class StoryAgent:
                     current.append(line)
 
         text = " ".join(self.stories)
+        self.planner = TopicPlanner(self.stories)
         # Train all models
         self.models = {}
 
         # Bigram
         print("Training Bigram")
-        bigram = StatisticalLanguageModel(n = 2, smoothing="laplace")
+        bigram = StatisticalLanguageModel(n = 2, smoothing="laplace", planner = self.planner)
         bigram.train(text, "saved_models/bigram.pkl")
         self.models["Bigram"] = bigram
 
         # Trigram
         print("Training Trigram")
-        trigram = StatisticalLanguageModel(n = 3, smoothing = "laplace")
+        trigram = StatisticalLanguageModel(n = 3, smoothing = "laplace", planner = self.planner)
         trigram.train(text, "saved_models/trigram.pkl")
         self.models["Trigram"] = trigram
 
         # RNN
         print("Training RNN")
-        rnn = RNNModel()
-        rnn.train(text, epochs = 30)
+        rnn = RNNModel(planner = self.planner)
+        rnn.train(text, epochs = 20)
         self.models["RNN"] = rnn
 
-        # configs = {
-        #     "Bigram":
-        #     dict(n = 2, smoothing = "laplace", path = "saved_models/bigram.pkl"),
-        #     "Trigram":
-        #     dict(n = 3, smoothing = "laplace", path = "saved_models/trigram.pkl"),
-        #     # "kneserney":
-        #     # dict(n = 3, smoothing = "kneserney", path = "saved_models/kneser.pkl")
-        # }
-
-        # for name, cfg in configs.items():
-        #     print(f"Training {name}")
-
-        #     lm = StatisticalLanguageModel(n = cfg["n"], smoothing = cfg["smoothing"])
-
-        #     lm.train(text, cfg["path"])
-
-        #     self.models[name] = lm
+        # LSTM
+        print("Training LSTM")
+        lstm = LSTMModel(planner = self.planner)
+        lstm.train(text, epochs = 20)
+        self.models["LSTM"] = lstm
 
     def retrieve_seed(self, keywords):
         keyword_set = set(k.lower() for k in keywords)
@@ -96,32 +89,21 @@ class StoryAgent:
         Retrieval-Augmented Story Generation
         prompt control the theme of story
         """
-        if model_name not in self.models:
-            model_name = "trigram"
+        # if model_name not in self.models:
+        #     model_name = "trigram"
+
         # RNN separate generation
-        if model_name=="RNN":
+        if model_name == "RNN":
             return self.models["RNN"].generate_story(keywords)
+        elif model_name == "LSTM":
+            return self.models["LSTM"].generate_story(keywords)
         # N-gram generation
-        
-        seed = self.retrieve_seed(keywords)
-        generated = self.models[model_name].generate(seed, num_sentences = 6)
+        return self.models[model_name].generate(keywords)
 
-        # keyword coverage repair
-        story_text = generated.lower()
-        missing = []
-
-        for k in keywords:
-            if k.lower() not in story_text:
-                missing.append(k)
-
-        if missing:
-            generated += (" In the end they found " + ", ".join(missing) + ".")
-
-        return generated
     
     def compare_models(self, keywords, runs = 5):
         results = {}
-        for model_name in ["Bigram", "Trigram", "RNN"]:
+        for model_name in ["Bigram", "Trigram", "RNN", "LSTM"]:
             stories=[]
             for _ in range(runs):
                 s=self.generate(keywords, model_name)

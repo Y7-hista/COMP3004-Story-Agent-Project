@@ -4,29 +4,29 @@ from agent.story_agent import StoryAgent
 from experiments.evaluator import StoryEvaluator
 
 
-st.set_page_config(layout="wide")
+st.set_page_config(layout = "wide")
 st.title("Interactive Story Generation Agent")
 
 @st.cache_resource
 def load_agent():
     return StoryAgent()
 
-agent=load_agent()
-evaluator=StoryEvaluator()
+agent = load_agent()
+evaluator = StoryEvaluator()
 
 
 # Session state
 if "history" not in st.session_state:
-    st.session_state.history=[]
+    st.session_state.history = []
 
 if "single_story" not in st.session_state:
-    st.session_state.single_story=None
+    st.session_state.single_story = None
 
 if "experiment_results" not in st.session_state:
-    st.session_state.experiment_results=None
+    st.session_state.experiment_results = None
 
 if "model" not in st.session_state:
-    st.session_state.model="Bigram"
+    st.session_state.model = "Bigram"
 
 
 # Sidebar
@@ -37,23 +37,24 @@ with st.sidebar:
         [
             "Bigram",
             "Trigram",
-            "RNN"
+            "RNN",
+            "LSTM"
         ],
-        key="model"
+        key = "model"
     )
 
     if st.button("Clear History"):
-        st.session_state.history=[]
+        st.session_state.history = []
 
     st.divider()
     st.subheader("History")
 
-    for i,item in enumerate(reversed(st.session_state.history[-8:])):
-        if st.button(f"{i+1}. "+",".join(item["keywords"]), key=f"h{i}"):
-            st.session_state.single_story=(item["story"])
+    for i, item in enumerate(reversed(st.session_state.history[-8:])):
+        if st.button(f"{i+1}. "+",".join(item["keywords"]), key = f"h{i}"):
+            st.session_state.single_story = (item["story"])
 
 # Tabs
-tab1,tab2=st.tabs(
+tab1, tab2 = st.tabs(
     [
     "Story Generator",
     "Experiment"
@@ -66,19 +67,19 @@ with tab1:
     st.header("Single Model Generation")
 
     with st.form("generate_form"):
-        prompt=st.text_input("Prompt", "cat, sun, castle")
-        submitted=st.form_submit_button("Generate Story")
+        prompt = st.text_input("Prompt", "cat, sun, castle")
+        submitted = st.form_submit_button("Generate Story")
 
         if submitted:
-            keywords=[
+            keywords = [
                 x.strip().lower()
                 for x in prompt.split(",")
                 if x.strip()
             ]
             with st.spinner("Generating..."):
-                story=agent.generate(keywords, st.session_state.model)
+                story = agent.generate(keywords, st.session_state.model)
 
-            st.session_state.single_story=story
+            st.session_state.single_story = story
             st.session_state.history.append({"keywords":keywords, "story":story})
 
 
@@ -91,27 +92,27 @@ with tab1:
 with tab2:
     st.header("Experimental Comparison")
     with st.form("experiment_form"):
-        prompt2=st.text_input("Experiment prompt", "cat, sun, castle")
-        runs=st.slider("Runs per model", 3, 20, 5)
-        run_exp=st.form_submit_button("Run Experiment")
+        prompt2 = st.text_input("Experiment prompt", "cat, sun, castle")
+        runs = st.slider("Runs per model", 3, 20, 5)
+        run_exp = st.form_submit_button("Run Experiment")
 
         if run_exp:
-            keywords=[x.strip().lower() for x in prompt2.split(",") if x.strip()]
+            keywords = [x.strip().lower() for x in prompt2.split(",") if x.strip()]
 
             with st.spinner("Running experiments..."):
-                outputs=agent.compare_models(keywords, runs)
-                analysis={}
+                outputs = agent.compare_models(keywords, runs)
+                analysis = {}
 
-                for model,stories in outputs.items():
-                    analysis[model]=(evaluator.evaluate_runs(stories, keywords))
+                for model, stories in outputs.items():
+                    analysis[model] = (evaluator.evaluate_runs(stories, keywords))
 
-                st.session_state.experiment_results=(outputs, analysis)
+                st.session_state.experiment_results = (outputs, analysis)
 
     if st.session_state.experiment_results:
-        outputs,analysis=(st.session_state.experiment_results)
+        outputs, analysis = (st.session_state.experiment_results)
         st.subheader("Metrics")
 
-        for model,stats in analysis.items():
+        for model, stats in analysis.items():
             model_name = model.title()  
             st.write(f"#### {model_name}")
             st.write(stats)

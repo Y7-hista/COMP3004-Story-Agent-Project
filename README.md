@@ -13,6 +13,8 @@ nltk.download('wordnet')
 nltk.download('omw-1.4')
 
 pip install torch torchvision torchaudio
+
+pip install spacy
 # Run:
 python -m streamlit run app.py
 ```

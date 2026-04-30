@@ -6,18 +6,18 @@ import string
 
 from nltk import sent_tokenize
 from nltk import word_tokenize
-
 from nltk.util import ngrams
 from nltk.probability import FreqDist
-
 from nltk.lm import MLE
-from nltk.lm import Laplace
-from nltk.lm import KneserNeyInterpolated
-
+from nltk.lm import Laplace, KneserNeyInterpolated
 from nltk.lm.preprocessing import padded_everygram_pipeline
-from models.ngram_model import NGramModel
+from collections import Counter
 import pickle
 import os
+
+from models.ngram_model import NGramModel
+from models.model_utils import save_model, load_model
+from models.topic_planner import TopicPlanner
 
 # Run for the first time:
 # nltk.download('punkt')
@@ -26,16 +26,17 @@ import os
 # nltk.download('omw-1.4')
 
 class StatisticalLanguageModel:
-    def __init__(self, n = 4, smoothing = "laplace"):
+    def __init__(self, n = 4, smoothing = "laplace", planner = None):
         self.n = n
         self.smoothing = smoothing
         self.model = None
-        # self.model = NGramModel(n = n, smoothing=smoothing)
+        self.planner = planner
         self.unigrams = []
         self.bigrams = []
         self.trigrams = []
         self.fourgrams = []
         self.tokenized_text = []
+        
 
     def preprocess(self, text):
         print("Preprocessing")
@@ -77,18 +78,15 @@ class StatisticalLanguageModel:
     
     def build_lm(self):
         print("Building Language Models.")
-        # train_data = self.tokenized_text
-        # vocab = list(set(train_data))
 
-        # self.model.train(train_data)
         train_data, vocab = padded_everygram_pipeline(self.n, self.tokenized_text)
 
-        if self.smoothing == "mle":
+        if self.smoothing  ==  "mle":
             self.model = MLE(self.n)
-        elif self.smoothing == "laplace":
+        elif self.smoothing  ==  "laplace":
             self.model = Laplace(self.n)
-        # elif self.smoothing == "kneserney":
-        #     self.model = KneserNeyInterpolated(self.n, discount=0.1)
+        # elif self.smoothing  ==  "kneserney":
+        #     self.model = KneserNeyInterpolated(self.n, discount = 0.1)
         else:
             raise ValueError("unknown smoothing")
         
@@ -98,14 +96,14 @@ class StatisticalLanguageModel:
     def train(self, text, model_path = "saved_models/SLM_model.pkl"):
         if os.path.exists(model_path):
             print("Loading saved model...")
-            self.model = StatisticalLanguageModel.load_model(model_path)
+            self.model = load_model(model_path)
             return
         
         self.tokenized_text = self.preprocess(text)
         self.build_grams()
         self.build_lm()
 
-        self.save_model(model_path)
+        save_model(self.model, model_path)
         print("Model saved.")
 
     # LM Function
@@ -116,13 +114,13 @@ class StatisticalLanguageModel:
             context = tuple(tokens[i - (self.n - 1) : i])
             word = tokens[i]
             p = self.model.score(word, context)
-            probability *= p
+            probability *=  p
         return probability
 
     # Test model perplexity
     def perplexity(self, test_sentences):
-        test=[word_tokenize(test_sentences.lower())]
-        test_grams, _= padded_everygram_pipeline(self.n, test)
+        test = [word_tokenize(test_sentences.lower())]
+        test_grams, _ = padded_everygram_pipeline(self.n, test)
         test_grams = list(test_grams)[0]
 
         return self.model.perplexity(test_grams)
@@ -132,7 +130,7 @@ class StatisticalLanguageModel:
         context = tuple(word_tokenize(context.lower())[-(self.n - 1) : ])
 
         vocab = list(self.model.vocab)
-        scored=[]
+        scored = []
 
         for w in vocab:
             p = self.model.score(w, list(context))
@@ -142,77 +140,182 @@ class StatisticalLanguageModel:
 
         return scored[:10]
 
-    def thematic_seed(self, keywords):
-        """
-        Search promots input in the dataset
-        """
-        candidates = []
-        keyword_set = set(k.lower() for k in keywords)
-
-        for sentence in self.tokenized_text:
-            overlap = len(keyword_set & set(sentence))
-
-            if overlap > 0:
-                candidates.append((overlap, sentence))
-
-        if not candidates:
-            return ["once", "upon", "a", "time"]
-
-        # overlap越高越好
-        candidates.sort(key = lambda x : x[0], reverse = True)
-
-        top = candidates[ : 20]
-        chosen = random.choice(top)[1]
-
-        return chosen[:min(8, len(chosen))]
-
     # Generating Language
-    def generate(self, keywords, num_sentences = 6, max_sentence_len = 20):
-        # 初始prompt
-        context=list(keywords)
-        story=[]
+    def generate(self, keywords, num_sentences = 8, max_sentence_len = 18):
+        """
+        Topic conditioned decoding
+        with entropy-adaptive sampling
+        """
+        if self.planner is None:
+            raise ValueError("TopicPlanner not injected into StatisticalLanguageModel")
 
-        for i in range(num_sentences):
-            sentence=[]
-            while len(sentence)<max_sentence_len:
-                # keyword injection
-                if random.random()<0.15 and len(keywords)>0:
-                    generated=[random.choice(keywords)]
-                else:
-                    try:
-                        generated=self.model.generate(num_words=4, text_seed=context)
-                    except:
-                        break
+        plan = self.planner.build_topic_plan(keywords)
 
-                    if not isinstance(generated, list):
-                        generated=[generated]
+        seed = plan["seed"]
+        topic_plan = plan["plan"]
+        neighbors = plan["neighbors"]
 
-                for tok in generated:
-                    if tok in ["<s>","</s>"]:
-                        break
-                    sentence.append(tok)
-                    context.append(tok)
-                    context=context[-(self.n - 1):]
+        context = list(seed[-(self.n-1):])
+        story = []
+        unused = set(k.lower() for k in keywords)
 
-                    if len(sentence)>=max_sentence_len:
-                        break
+        for s in range(num_sentences):
+            sentence = []
 
-                if len(sentence)>6 and random.random()<0.35:
+            if s < len(topic_plan):
+                target = topic_plan[s]
+            else:
+                target = random.choice(keywords).lower()
+
+            for t in range(max_sentence_len):
+                candidates = []
+                for w in self.model.vocab:
+                    if w in ["<s>","</s>"]:
+                        continue
+
+                    p = self.model.score(w, context)
+                    if p <= 0:
+                        continue
+
+                    # adaptive temperature
+                    if self.n == 2:
+                        temp = 1.15
+                    else:
+                        temp = 1.65
+
+                    p = p**(1/temp)
+
+                    # SOFT topic bias
+                    # much weaker
+                    if w == target:
+                        p *= 1.8
+
+                    if (target in neighbors and w in neighbors[target]):
+                        p*= 1.15
+
+                    if w in unused:
+                        p *= 1.15
+
+                    # anti repetition
+                    if w in sentence[-4:]:
+                        p *= 0.05
+
+                    candidates.append((w,p))
+
+                if not candidates:
                     break
 
-            if sentence:
-                text=" ".join(sentence)
-                if text[-1] not in ".!?":
-                    text+="."
+                # true top-p (correct)
+                candidates.sort(key = lambda x:x[1], reverse = True)
+                total = sum(p for _, p in candidates)
 
-                story.append(text.capitalize())
-        return " ".join(story)
+                norm = [(w,p/total) for w,p in candidates]
+
+                # entropy adaptive p
+                if self.n == 2:
+                    nucleus_p = 0.93
+                else:
+                    nucleus_p = 0.97
+
+                filtered = []
+                cum = 0
+
+                for w,p in norm:
+                    filtered.append((w,p))
+                    cum += p
+
+                    if cum >= nucleus_p:
+                        break
+
+                words = [x[0] for x in filtered]
+                probs = [x[1] for x in filtered]
+
+                next_word = random.choices(words, weights = probs, k = 1)[0]
+                sentence.append(next_word)
+                context.append(next_word)
+                context = context[-(self.n-1):]
+
+                if next_word.lower() in unused:
+                    unused.remove(next_word.lower())
+
+                if (len(sentence)>10 and random.random()<0.22):
+                    break
+
+            if len(sentence)>5:
+                txt = " ".join(sentence)
+                txt = txt.capitalize()+"."
+                story.append(txt)
+
+        # light repair only
+        text = " ".join(story).lower()
+
+        missing = [k for k in keywords if k.lower() not in text]
+
+        # if missing topics absent,
+        # regenerate last sentence under lexical bias
+        if len(missing) > 0:
+            repair_sentence = []
+            target = random.choice(missing)
+
+            for i in range(max_sentence_len):
+                candidates = []
+
+                for w in self.model.vocab:
+                    if w in ["<s>","</s>"]:
+                        continue
+
+                    p = self.model.score(w, context)
+
+                    if p <= 0:
+                        continue
+                    # strong temporary bias only in repair decoding
+                    if w == target:
+                        p *= 4.5
+
+                    # no repeat penalty
+                    if w in repair_sentence[-4:]:
+                        p *= 0.05
+
+                    candidates.append((w,p))
+
+                if not candidates:
+                    break
+
+                candidates.sort(key = lambda x:x[1], reverse = True)
+                # nucleus repair decoding
+                total = sum(p for j, p in candidates)
+                cum = 0
+                filtered = []
+
+                for w,p in candidates:
+                    p = p / total
+                    filtered.append((w,p))
+                    cum += p
+
+                    if cum >= 0.92:
+                        break
+
+                words = [x[0] for x in filtered]
+                probs = [x[1] for x in filtered]
+
+                nxt = random.choices(words, weights = probs, k = 1)[0]
+                repair_sentence.append(nxt)
+                context.append(nxt)
+                context = context[-(self.n-1):]
+
+                if len(repair_sentence)>10 and random.random()<0.2:
+                    break
+
+            if len(repair_sentence)>4:
+                story.append(" ".join(repair_sentence).capitalize() + ".")
+                
+        return " ".join(story)   
 
     # compare models
     def compare_smoothing(self, sentence):
         for m in ["mle", "laplace"]:
             tmp = StatisticalLanguageModel(n = self.n, smoothing = m)
-            flat=" ".join(
+            flat = " ".join(
                 [
                  " ".join(x)
                  for x in self.tokenized_text
@@ -222,11 +325,3 @@ class StatisticalLanguageModel:
 
             print(m, tmp.perplexity(sentence))
 
-    def save_model(self,path):
-        with open(path, "wb") as f:
-            pickle.dump(self.model, f)
-
-    @staticmethod
-    def load_model(path):
-        with open(path, "rb") as f:
-            return pickle.load(f)
