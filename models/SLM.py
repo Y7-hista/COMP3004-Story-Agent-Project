@@ -13,9 +13,10 @@ from nltk.lm import Laplace, KneserNeyInterpolated
 from nltk.lm.preprocessing import padded_everygram_pipeline
 from collections import Counter
 import pickle
-import os
+import os, re
+# import unicodedata
 
-from models.ngram_model import NGramModel
+# from models.ngram_model import NGramModel
 from models.model_utils import save_model, load_model
 from models.topic_planner import TopicPlanner
 
@@ -40,26 +41,76 @@ class StatisticalLanguageModel:
 
     def preprocess(self, text):
         print("Preprocessing")
-        punctuation = string.punctuation + "'" + "-" + "'" + "-"
-        punctuation = punctuation.replace(".", "")
-        text = text.lower()
+        # remove strange control chars only
+        text = re.sub(r"[\x00-\x1f\x7f-\x9f]", " ", text)
 
-        for p in punctuation:
-            if p not in ".?!":
-                text = text.replace(p, " ")
+        # keep proper unicode punctuation
         sentences = sent_tokenize(text)
-        processed = []
 
+        processed = []
         for sentence in sentences:
             tokens = word_tokenize(sentence)
-            
-            tokens = [
-                t for t in tokens
-                    if t not in [".", "!", "?"]
-            ]
-            if len(tokens) > 0:
-                processed.append(tokens)
+
+            cleaned_tokens = []
+
+            for t in tokens:
+                # skip sentence punctuation
+                if t in [".", "!", "?"]:
+                    continue
+
+                # skip garbage-only tokens
+                if len(t.strip()) == 0:
+                    continue
+
+                # remove weird standalone unicode garbage
+                if t in ["â", "€", "™", "œ"]:
+                    continue
+
+                cleaned_tokens.append(t)
+
+            if len(cleaned_tokens) > 0:
+                processed.append(cleaned_tokens)
+
         return processed
+        # # Unicode normalize (abandoned)
+        # text = unicodedata.normalize("NFKD", text)
+
+        # # Fix common mojibake
+        # replacements = {
+        #     "â€œ": '"',
+        #     "â€\x9d": '"',
+        #     "â€™": "'",
+        #     "â€˜": "'",
+        #     "â€": '"',
+        #     "Â": "",
+        #     "â€“": "-",
+        #     "â€”": "-",
+        # }
+
+        # for bad, good in replacements.items():
+        #     text = text.replace(bad, good)
+
+        # text = text.lower()
+        # punctuation = string.punctuation + "'" + "-" + "'" + "-"
+        # punctuation = punctuation.replace(".", "")
+        # # text = text.lower()
+
+        # for p in punctuation:
+        #     if p not in ".?!":
+        #         text = text.replace(p, " ")
+        # sentences = sent_tokenize(text)
+        # processed = []
+
+        # for sentence in sentences:
+        #     tokens = word_tokenize(sentence)
+            
+        #     tokens = [
+        #         t for t in tokens
+        #             if t not in [".", "!", "?"]
+        #     ]
+        #     if len(tokens) > 0:
+        #         processed.append(tokens)
+        # return processed
     
     def build_grams(self):
         for seq in self.tokenized_text:
@@ -143,8 +194,7 @@ class StatisticalLanguageModel:
     # Generating Language
     def generate(self, keywords, num_sentences = 8, max_sentence_len = 18):
         """
-        Topic conditioned decoding
-        with entropy-adaptive sampling
+        Topic conditioned decoding with entropy-adaptive sampling
         """
         if self.planner is None:
             raise ValueError("TopicPlanner not injected into StatisticalLanguageModel")
@@ -185,8 +235,7 @@ class StatisticalLanguageModel:
 
                     p = p**(1/temp)
 
-                    # SOFT topic bias
-                    # much weaker
+                    # soft topic bias (weaker)
                     if w == target:
                         p *= 1.8
 
@@ -251,8 +300,7 @@ class StatisticalLanguageModel:
 
         missing = [k for k in keywords if k.lower() not in text]
 
-        # if missing topics absent,
-        # regenerate last sentence under lexical bias
+        # if missing topics absent, regenerate last sentence under lexical bias
         if len(missing) > 0:
             repair_sentence = []
             target = random.choice(missing)

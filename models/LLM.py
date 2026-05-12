@@ -6,11 +6,12 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from models.topic_planner import TopicPlanner
 
-# from huggingface_hub import login
-
 
 class LLMModel:
-    def __init__(self, model_name = "google/gemma-3-1b-it", local_model_path = "./google/gemma-3-1b-it-local", planner = None):
+    def __init__(self, model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0", local_model_path = "saved_models/llm", planner = None):
+        # "google/gemma-3-1b-it", local_model_path = "./google/gemma-3-1b-it-local"
+        # distilgpt2
+        # TinyLlama/TinyLlama-1.1B-Chat-v1.0
         self.model_name = model_name
         self.local_model_path = local_model_path
         self.planner = planner
@@ -23,15 +24,13 @@ class LLMModel:
         self.top_p = 0.9
         self.max_length = 500
 
-    def train(self, text = None, model_path = "saved_models/llm.pkl", temperature = 0.9, top_k =  50, top_p = 0.9, repetition_penalty = 1.2, max_length = 500):
+    def train(self, text = None, model_path = "saved_models/llm", temperature = 0.9, top_k =  50, top_p = 0.9, repetition_penalty = 1.2, max_length = 500):
         self.temperature = temperature
         self.top_k = top_k
         self.top_p = top_p
         self.repetition_penalty = repetition_penalty
         self.max_length = max_length
         self.model_path = model_path
-
-        
 
         if os.path.exists(self.local_model_path):
             print("Loading saved LLM")
@@ -56,29 +55,39 @@ class LLMModel:
     def generate_sentence_llm(self, context_text, target, allow_dialogue=False):
 
         style = "Include a short dialogue using quotes." if allow_dialogue else "No dialogue."
+        
+        # Build prompts for texts (to improve the coherence, syntax)
+        prompt = f"""
+            You are a children's story writer.
+            Write one short simple sentence.
 
-        prompt = (
-            f"Write ONE natural sentence in a children's story.\n"
-            f"Focus on: {target}.\n"
-            f"{style}\n"
-            f"Do NOT write code or explanations.\n"
-            f"Sentence:"
-        )
+            Topic: {target}
+
+            Rules:
+            - natural English
+            - child-friendly
+            - no explanations
+            - no lists
+            - no article writing
+            - no code
+
+            Sentence:
+        """
 
         input_ids = self.tokenizer.encode(prompt, return_tensors="pt")
 
         with torch.no_grad():
             output = self.model.generate(
                 input_ids,
-                max_new_tokens=35,
-                do_sample=True,
-                temperature=0.6,
-                top_k=40,
-                top_p=0.85,
-                repetition_penalty=1.2,
-                eos_token_id=self.tokenizer.eos_token_id
+                max_new_tokens = 35,
+                do_sample = True,
+                temperature = 0.6,
+                top_k = 40,
+                top_p = 0.85,
+                repetition_penalty = 1.2,
+                eos_token_id = self.tokenizer.eos_token_id
             )
-
+        # Decode 
         generated_ids = output[0][input_ids.shape[1]:]
         text = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
 
@@ -97,6 +106,7 @@ class LLMModel:
 
 
     def generate_text(self, prompts):
+        # Remove the generate_sentence (make it directly generate a entire story/texts)
         input_ids = self.tokenizer.encode(prompts, return_tensors = "pt")
 
         with torch.no_grad():
@@ -116,6 +126,7 @@ class LLMModel:
             return text
         
     def clean_text(self, text):
+        # Avoid some codes, points (make the output become a complete story)
         text = text.replace("\n", " ")
         text = re.sub(r"def .*", "", text)
         text = re.sub(r"final answer.*", "", text)
@@ -131,31 +142,45 @@ class LLMModel:
 
         return " ".join(cleaned[:6])
 
-
+    
     def generate_story(self, keywords, num_sentences=8):
+        prompt = f"""
+            You are a creative children's story writer.
 
-        plan = self.planner.build_topic_plan(keywords)
-        topic_plan = plan["plan"]
+            Write a short story.
 
-        story = []
+            Keywords: {", ".join(keywords)}
 
-        for i in range(num_sentences):
+            Requirements:
+            - simple English
+            - coherent story
+            - child-friendly
+            - include all keywords naturally
+            - around {num_sentences} sentences
+            - no bullet points
+            - no explanations
 
-            target = topic_plan[i] if i < len(topic_plan) else random.choice(keywords)
+            Story:
+        """
 
-            sentence = None
+        input_ids = self.tokenizer.encode(prompt, return_tensors="pt")
+        attention_mask = torch.ones_like(input_ids)
 
-            # 🔥 控制剧情结构
-            allow_dialogue = (i >= 2 and i <= 5 and random.random() < 0.4)
+        with torch.no_grad():
+            output = self.model.generate(
+                input_ids,
+                attention_mask = attention_mask,
+                max_new_tokens = 180,
+                do_sample = True,
+                temperature = 0.8,
+                top_p = 0.92,
+                repetition_penalty = 1.15,
+                pad_token_id = self.tokenizer.eos_token_id,
+                eos_token_id = self.tokenizer.eos_token_id
+            )
 
-            for _ in range(5):
-                sentence = self.generate_sentence_llm("", target, allow_dialogue)
-                if sentence:
-                    break
+        generated_ids = output[0][input_ids.shape[1]:]
+        text = self.tokenizer.decode(generated_ids, skip_special_tokens = True)
+        text = self.clean_text(text)
 
-            if not sentence:
-                continue
-
-            story.append(sentence)
-
-        return " ".join(story)
+        return text

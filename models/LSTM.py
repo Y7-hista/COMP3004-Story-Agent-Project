@@ -276,7 +276,7 @@ class LSTMModel:
 
                 if sentence_count>=6:
                     break
-
+        #  Remove some repeated words
         txt=" ".join(words)
         txt=txt.replace("then then then", "then")
         txt=txt.replace("always always", "always")

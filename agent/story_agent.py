@@ -2,6 +2,7 @@ import random
 import re
 import nltk
 
+# from datasets import load_dataset
 
 from models.topic_planner import TopicPlanner
 from models.SLM import StatisticalLanguageModel
@@ -13,9 +14,9 @@ from models.LLM import LLMModel
 class StoryAgent:
     def __init__(self,max_stories = 500):
         print("Loading dataset...")
+        # Using txt to train models:
         self.stories = []
         current = []
-
         with open("data/TinyStories-train.txt", encoding = "utf-8") as f:
             count = 0
             for line in f:
@@ -30,6 +31,27 @@ class StoryAgent:
                             break
                 else:
                     current.append(line)
+        # Data set import using "dataset = load_dataset("roneneldan/TinyStories")"
+        # print("Loading dataset from Hugging Face...")
+
+        # dataset = load_dataset("roneneldan/TinyStories")
+        # self.stories = []
+        # train_data = dataset["train"]
+
+        # def fix_mojibake(text):
+        #     try:
+        #         return text.encode("latin1").decode("utf-8")
+        #     except:
+        #         return text
+            
+        # for i, sample in enumerate(train_data):
+        #     story = sample["text"].strip()
+        #     story = fix_mojibake(story)
+        #     if story:
+        #         self.stories.append(story)
+
+        #     if len(self.stories) >= max_stories:
+        #         break
 
         text = " ".join(self.stories)
         self.planner = TopicPlanner(self.stories)
@@ -66,16 +88,22 @@ class StoryAgent:
         llm.train(text)
         self.models["LLM"] = llm
 
+
+        
     def retrieve_seed(self, keywords):
+        """
+        Select a seed story and extract initial words based on keywords
+        """
         keyword_set = set(k.lower() for k in keywords)
         scored = []
+        # Score each story (the number of the keywords)
         for story in self.stories:
             words = set(re.findall(r"\w+", story.lower()))
             overlap = len(keyword_set & words)
 
             if overlap > 0:
                 scored.append((overlap, story))
-
+        # Choose a seed story (or random)
         if not scored:
             seed_story = random.choice(self.stories)
         else:
@@ -95,10 +123,8 @@ class StoryAgent:
     def generate(self, keywords, model_name = "trigram"):
         """
         Retrieval-Augmented Story Generation
-        prompt control the theme of story
+        prompt (multiple words) control the theme of story
         """
-        # if model_name not in self.models:
-        #     model_name = "trigram"
 
         # RNN separate generation
         if model_name == "RNN":

@@ -41,14 +41,7 @@ with st.sidebar:
     st.header("Generator")
     st.radio(
         "Choose model",
-        [
-            "Bigram",
-            "Trigram",
-            "RNN",
-            "LSTM",
-            "LLM"
-        ],
-        key = "model"
+        ["Bigram", "Trigram", "RNN", "LSTM", "LLM"], key = "model"
     )
 
     if st.button("Clear History"):
@@ -62,15 +55,10 @@ with st.sidebar:
             st.session_state.single_story = (item["story"])
 
 # Tabs
-tab1, tab2 = st.tabs(
-    [
-    "Story Generator",
-    "Experiment"
-    ]
-)
+tab1, tab2 = st.tabs(["Story Generator", "Experiment"])
 
 
-# Tab 1: Story Generator
+# Tab 1: Story Generator (just the application of agent to generate storyies)
 with tab1:
     st.header("Single Model Generation")
 
@@ -96,7 +84,7 @@ with tab1:
         st.write(st.session_state.single_story)
 
 
-# Tab 2: Experiment
+# Tab 2: Experiments (compare models with the same prompt inputs)
 with tab2:
     st.header("Experimental Comparison")
     with st.form("experiment_form"):
@@ -147,19 +135,7 @@ with tab2:
                     ["keyword_coverage", "semantic_coherence", "syntax_validity", "distinct_1", "repetition_rate"]
                 )
 
-
-        # if run_exp:
-        #     keywords = [x.strip().lower() for x in prompt2.split(",") if x.strip()]
-
-        #     with st.spinner("Running experiments..."):
-        #         outputs = agent.compare_models(keywords, runs)
-        #         analysis = {}
-
-        #         for model, stories in outputs.items():
-        #             analysis[model] = (evaluator.evaluate_runs(stories, keywords))
-
-        #         st.session_state.experiment_results = (outputs, analysis)
-
+    # Experiments results
     if st.session_state.experiment_results:
         outputs, analysis = (st.session_state.experiment_results)
         st.subheader("Metrics")
@@ -174,6 +150,7 @@ with tab2:
                 st.write("-", s)
         
         st.divider()
+        # figures
         st.header("Visualizations")
 
         figure_dir = "saved_results/figures"
