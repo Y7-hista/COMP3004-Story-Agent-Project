@@ -29,9 +29,14 @@ The experimental interface and story generation environment were implemented usi
 pip install -r requirements.txt
 pip install torchvision
 pip install -U sentence-transformers
+pip install spacy
 python -m spacy download en_core_web_sm
+# Or (if fail) in the lab -- to use the related python environment
+C:\Anaconda3\python.exe -m spacy download en_core_web_sm
 # Run:
 python -m streamlit run app.py
+# Or (if fail) in the lab -- to use the related python environment
+C:\Anaconda3\python.exe -m streamlit run app.py
 ```
 
 2. Installation during Development
@@ -80,10 +85,13 @@ If the network connection is available, the Transformer model will automatically
    - Large local cache files of HuggingFace models
    The complete and full version of the project, including all datasets and local cached large language model files, is provided separately via ***OneDrive***:
    - Overall project files (***OneDrive***):
-
+    *https://uniofnottm-my.sharepoint.com/:f:/g/personal/scyxy5_nottingham_ac_uk/IgBKnw-EzoVFSqd9F059rfRPAToHAaH4jrt_PGg1SUeNcVY?e=gd8Vk4*
+    
    - A lightweight project repository can also be obtained on GitHub (***GitHub repository:***):
-     - 
+    *https://github.com/Y7-hista/COMP3004-Story-Agent-Project.git*
 
 3. The ZIP file submission package and GitHub repository contain all source code, evaluation system, Streamlit interface, saved statistical models, and recurrent neural network models, which are necessary for reproducing the main experimental framework.
+
 If a network connection is available, the Transformer model will be automatically downloaded and cached locally by HuggingFace Transformers on the first run.
+
 This separation is necessary because the complete dataset and Transformer cache files exceed the size limit for Moodle course assignment uploads.
