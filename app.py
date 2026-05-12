@@ -1,8 +1,15 @@
 import streamlit as st
-
+import os
 from agent.story_agent import StoryAgent
 from experiments.evaluator import StoryEvaluator
 
+from experiments.visualization import (
+    plot_metric_bar,
+    plot_radar_chart,
+    plot_diversity_scatter,
+    plot_quality_scatter,
+    plot_multi_metric_comparison
+)
 
 st.set_page_config(layout = "wide")
 st.title("Interactive Story Generation Agent")
@@ -98,16 +105,60 @@ with tab2:
         run_exp = st.form_submit_button("Run Experiment")
 
         if run_exp:
-            keywords = [x.strip().lower() for x in prompt2.split(",") if x.strip()]
+            keywords = [
+                x.strip().lower()
+                for x in prompt2.split(",")
+                if x.strip()
+            ]
 
             with st.spinner("Running experiments..."):
+                # Generate stories
                 outputs = agent.compare_models(keywords, runs)
+
+                # Evaluate
                 analysis = {}
 
                 for model, stories in outputs.items():
-                    analysis[model] = (evaluator.evaluate_runs(stories, keywords))
+                    analysis[model] = evaluator.evaluate_runs(stories, keywords)
 
+                # Save session
                 st.session_state.experiment_results = (outputs, analysis)
+
+                # Generate figures
+                plot_metric_bar(analysis, "keyword_coverage")
+                plot_metric_bar(analysis, "semantic_coherence")
+                plot_metric_bar(analysis, "syntax_validity")
+                plot_metric_bar(analysis, "distinct_1")
+                plot_metric_bar(analysis, "repetition_rate")
+
+                # Radar chart
+                plot_radar_chart(
+                    analysis,
+                    ["keyword_coverage", "distinct_1", "semantic_coherence", "syntax_validity", "repetition_rate"]
+                )
+
+                # Scatter plots
+                plot_diversity_scatter(analysis)
+                plot_quality_scatter(analysis)
+
+                # Multi metric chart
+                plot_multi_metric_comparison(
+                    analysis,
+                    ["keyword_coverage", "semantic_coherence", "syntax_validity", "distinct_1", "repetition_rate"]
+                )
+
+
+        # if run_exp:
+        #     keywords = [x.strip().lower() for x in prompt2.split(",") if x.strip()]
+
+        #     with st.spinner("Running experiments..."):
+        #         outputs = agent.compare_models(keywords, runs)
+        #         analysis = {}
+
+        #         for model, stories in outputs.items():
+        #             analysis[model] = (evaluator.evaluate_runs(stories, keywords))
+
+        #         st.session_state.experiment_results = (outputs, analysis)
 
     if st.session_state.experiment_results:
         outputs, analysis = (st.session_state.experiment_results)
@@ -121,3 +172,25 @@ with tab2:
 
             for s in outputs[model][:3]:
                 st.write("-", s)
+        
+        st.divider()
+        st.header("Visualizations")
+
+        figure_dir = "saved_results/figures"
+        figure_files = [
+            "keyword_coverage_bar.png",
+            "semantic_coherence_bar.png",
+            "syntax_validity_bar.png",
+            "distinct_1_bar.png",
+            "repetition_rate_bar.png",
+            "radar_chart.png",
+            "diversity_vs_repetition.png",
+            "coherence_vs_syntax.png",
+            "multi_metric_comparison.png"
+        ]
+
+        for fig in figure_files:
+            path = os.path.join(figure_dir, fig)
+
+            if os.path.exists(path):
+                st.image(path, caption = fig, use_container_width = True)

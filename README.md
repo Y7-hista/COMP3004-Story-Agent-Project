@@ -19,10 +19,12 @@ pip install spacy
 pip install langchain-community langchain-core
 pip install git+https://github.com/huggingface/transformers@v4.49.0-Gemma-3
 
-
+pip install -U sentence-transformers
 
 # Run:
 python -m streamlit run app.py
 ```
 
-If need to push the codes, the token should be committed before push.
+2. Dataset
+
+https://huggingface.co/datasets/roneneldan/TinyStories
